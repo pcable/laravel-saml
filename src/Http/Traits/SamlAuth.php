@@ -2,6 +2,7 @@
 
 namespace KingStarter\LaravelSaml\Http\Traits;
 
+use LightSaml\Credential\KeyHelper;
 use Storage;
 use Illuminate\Http\Request;
 use LightSaml\Model\Protocol\Response as Response;
@@ -107,8 +108,21 @@ trait SamlAuth
     {
         // Get corresponding destination and issuer configuration from SAML config file for assertion URL
         // Note: Simplest way to determine the correct assertion URL is a short debug output on first run
-        $destination = config('saml.sp.'.base64_encode($authnRequest->getAssertionConsumerServiceURL()).'.destination');
-        $issuer = config('saml.sp.'.base64_encode($authnRequest->getAssertionConsumerServiceURL()).'.issuer');
+        //     : The old code base64 encoded the url, the new config file format doesn't require this,
+        //       It also makes some changes to the fields
+        $url = $authnRequest->getAssertionConsumerServiceURL();
+        $sp = config('saml.sp')[$url];
+        if(!$sp){
+            $sp = config('saml.sp.' . base64_encode($url));
+            if(!$sp){
+                throw new \Exception("Invalid SAML Consumer $url");
+            }
+        }
+        $destination = isset($sp['destination']) ? $sp['destination'] : $url;
+        $issuer = isset($sp['issuer']) ? $sp['issuer'] : config('saml.idp.entityId');
+        $audienceRestriction = $url;
+        if(isset($sp['entity-id'])) $audienceRestriction = $sp['entity-id'];
+        if(isset($sp['audience_restriction'])) $audienceRestriction = $sp['audience_restriction'];
 
         // Load in both certificate and keyfile
         // The files are stored within a private storage path, this prevents from
@@ -120,17 +134,32 @@ trait SamlAuth
 
         if (config('saml.debug_saml_request')) {
             Log::debug('<SamlAuth::buildSAMLResponse>');
-            Log::debug('Assertion URL: ' . $authnRequest->getAssertionConsumerServiceURL());
-            Log::debug('Assertion URL: ' . base64_encode($authnRequest->getAssertionConsumerServiceURL()));
+            Log::debug('Assertion URL: ' . $url);
+            Log::debug('Assertion URL: ' . base64_encode($url));
             Log::debug('Destination: ' . $destination);
             Log::debug('Issuer: ' . $issuer);
             Log::debug('Certificate: ' . $this->certfile());
+            Log::debug('SAMLRequest:' . $request->get('SAMLRequest'));
+        }
+
+        //Validate sp certifcate
+        $spCert = null;
+        if(isset($sp['certificate-file'])){
+            $spCert = X509Certificate::fromFile(Storage::disk('saml')->path($sp['certificate-file']));
+        }
+        if(isset($sp['certificate'])){
+            $x509 = new X509Certificate();
+            $spCert = $x509->setData($sp['certificate']);
+        }
+        if($spCert && !$authnRequest->getSignature()->validate(KeyHelper::createPublicKey($spCert))){
+            Log::error("Invalid signature for URL $url. SAMLRequest=" . $request->get('SAMLRequest'));
+            throw new \Exception("Invalid signature for URL $url.");
         }
 
         // Generate the response object
         $response = new \LightSaml\Model\Protocol\Response();
         $response
-           ->addAssertion($assertion = new \LightSaml\Model\Assertion\Assertion())
+            ->addAssertion($assertion = new \LightSaml\Model\Assertion\Assertion())
             ->setID(\LightSaml\Helper::generateID())
             ->setIssueInstant(new \DateTime())
             ->setDestination($destination)
@@ -162,60 +191,60 @@ trait SamlAuth
             ->setIssuer(new \LightSaml\Model\Assertion\Issuer($issuer))
             
             ->setSubject(
-                    (new \LightSaml\Model\Assertion\Subject())
-                        ->setNameID(new \LightSaml\Model\Assertion\NameID(
-                            $email,
-                            \LightSaml\SamlConstants::NAME_ID_FORMAT_EMAIL
-                        ))
+                (new \LightSaml\Model\Assertion\Subject())
+                    ->setNameID(new \LightSaml\Model\Assertion\NameID(
+                        $email,
+                        \LightSaml\SamlConstants::NAME_ID_FORMAT_EMAIL
+                    ))
                     ->addSubjectConfirmation(
-                            (new \LightSaml\Model\Assertion\SubjectConfirmation())
-                           ->setMethod(\LightSaml\SamlConstants::CONFIRMATION_METHOD_BEARER)
-                           ->setSubjectConfirmationData(
-                                    (new \LightSaml\Model\Assertion\SubjectConfirmationData())
-                                   ->setInResponseTo($authnRequest->getId())
-                                   ->setNotOnOrAfter(new \DateTime('+1 MINUTE'))
-                                   ->setRecipient($authnRequest->getAssertionConsumerServiceURL())
-                                )
-                        )
-                )
-                ->setConditions(
-                    (new \LightSaml\Model\Assertion\Conditions())
-                        ->setNotBefore(new \DateTime())
-                        ->setNotOnOrAfter(new \DateTime('+1 MINUTE'))
-                        ->addItem(
-                            new \LightSaml\Model\Assertion\AudienceRestriction([
-                                config('saml.sp.'.base64_encode($authnRequest->getAssertionConsumerServiceURL()).'.audience_restriction', 
-                                    $authnRequest->getAssertionConsumerServiceURL())])
-                        )
-                )
+                        (new \LightSaml\Model\Assertion\SubjectConfirmation())
+                            ->setMethod(\LightSaml\SamlConstants::CONFIRMATION_METHOD_BEARER)
+                            ->setSubjectConfirmationData(
+                                (new \LightSaml\Model\Assertion\SubjectConfirmationData())
+                                    ->setInResponseTo($authnRequest->getId())
+                                    ->setNotOnOrAfter(new \DateTime('+1 MINUTE'))
+                                    ->setRecipient($authnRequest->getAssertionConsumerServiceURL())
+                            )
+                    )
+            )
+            ->setConditions(
+                (new \LightSaml\Model\Assertion\Conditions())
+                    ->setNotBefore(new \DateTime())
+                    ->setNotOnOrAfter(new \DateTime('+1 MINUTE'))
+                    ->addItem(
+                        new \LightSaml\Model\Assertion\AudienceRestriction([
+                            $audienceRestriction
+                        ])
+                    )
+            )
             ->addItem(
-                    (new \LightSaml\Model\Assertion\AttributeStatement())
+                (new \LightSaml\Model\Assertion\AttributeStatement())
                     ->addAttribute(new \LightSaml\Model\Assertion\Attribute(
-                            \LightSaml\ClaimTypes::EMAIL_ADDRESS,
-                            $email
-                        ))
+                        \LightSaml\ClaimTypes::EMAIL_ADDRESS,
+                        $email
+                    ))
                     ->addAttribute(new \LightSaml\Model\Assertion\Attribute(
-                            \LightSaml\ClaimTypes::COMMON_NAME,
-                            $name
-                        ))
+                        \LightSaml\ClaimTypes::COMMON_NAME,
+                        $name
+                    ))
                     ->addAttribute(new \LightSaml\Model\Assertion\Attribute(
-                            \LightSaml\ClaimTypes::ROLE,
-                            $roles
-                        ))
-                )
+                        \LightSaml\ClaimTypes::ROLE,
+                        $roles
+                    ))
+            )
             ->addItem(
-                    (new \LightSaml\Model\Assertion\AuthnStatement())
+                (new \LightSaml\Model\Assertion\AuthnStatement())
                     ->setAuthnInstant(new \DateTime('-10 MINUTE'))
                     ->setSessionIndex('_some_session_index')
                     ->setAuthnContext(
-                            (new \LightSaml\Model\Assertion\AuthnContext())
-                           ->setAuthnContextClassRef(\LightSaml\SamlConstants::AUTHN_CONTEXT_PASSWORD_PROTECTED_TRANSPORT)
-                        )
-                )
-            ;
-            
-            // Send out the saml response
-            $this->sendSamlResponse($response);
+                        (new \LightSaml\Model\Assertion\AuthnContext())
+                            ->setAuthnContextClassRef(\LightSaml\SamlConstants::AUTHN_CONTEXT_PASSWORD_PROTECTED_TRANSPORT)
+                    )
+            )
+        ;
+
+        // Send out the saml response
+        $this->sendSamlResponse($response);
     }
 
     /**

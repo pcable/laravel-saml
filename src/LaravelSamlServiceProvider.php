@@ -75,7 +75,6 @@ class LaravelSamlServiceProvider extends ServiceProvider
     protected function registerModuleMakeCommand()
     {
         $this->commands([
-            EncodeAssertionUrlCommand::class,
             SamlSetupCommand::class,
         ]);
     }
