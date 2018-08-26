@@ -84,7 +84,7 @@ trait SamlAuth
             // Get and decode the SAML request
             $SAML = $request->SAMLRequest;
             $decoded = base64_decode($SAML);
-            $xml = gzinflate($decoded);
+            $xml = $decoded[0] == '<' ? $decoded : gzinflate($decoded);
             // Initiate context and authentication request object
             $deserializationContext = new \LightSaml\Model\Context\DeserializationContext();
             $deserializationContext->getDocument()->loadXML($xml);
