@@ -6,6 +6,7 @@ use Illuminate\Support\ServiceProvider;
 use Illuminate\Foundation\Application as LaravelApplication;
 use Config;
 use KingStarter\LaravelSaml\Console\EncodeAssertionUrlCommand;
+use KingStarter\LaravelSaml\Console\SamlSetupCommand;
 
 class LaravelSamlServiceProvider extends ServiceProvider
 {
@@ -39,15 +40,18 @@ class LaravelSamlServiceProvider extends ServiceProvider
     protected function bootInConsole()
     {
         if ($this->app instanceof LaravelApplication && $this->app->runningInConsole()) {
-            // Publishing configurations
-            $this->publishes([
-                __DIR__ . '/config/saml.php' => config_path('saml.php'),
-            ], 'saml_config');
-            
+
             // Create storage/saml directory
             if (!file_exists(storage_path() . "/saml/idp")) {
                 mkdir(storage_path() . "/saml/idp", 0755, true);
             }
+
+            // Publishing configurations
+            $this->publishes([
+                __DIR__ . '/config/saml.php' => config_path('saml.php'),
+                __DIR__ . '/resources/metadata.blade.php' => storage_path('saml/idp/metadata.blade.php')
+            ], 'saml_config');
+
         }
 
         $this->registerCommands();
@@ -71,7 +75,8 @@ class LaravelSamlServiceProvider extends ServiceProvider
     protected function registerModuleMakeCommand()
     {
         $this->commands([
-            EncodeAssertionUrlCommand::class
+            EncodeAssertionUrlCommand::class,
+            SamlSetupCommand::class,
         ]);
     }
 
