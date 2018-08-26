@@ -20,7 +20,7 @@ class SamlSetupCommand extends Command
      *
      * @var string
      */
-    protected $signature = 'laravel-saml:generate-meta {--cert} {--cert-days=365}';
+    protected $signature = 'laravel-saml:generate-meta {--cert} {--cert-days=100000}';
 
     /**
      * The console command description.
