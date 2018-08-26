@@ -232,6 +232,17 @@ trait SamlAuth
         $messageContext->setMessage($response)->asResponse();
         /** @var \Symfony\Component\HttpFoundation\Response $httpResponse */
         $httpResponse = $postBinding->send($messageContext);
+
+        if (config('saml.debug_saml_request')) {
+            $matches = [];
+            preg_match('/name="SAMLResponse" value="([^"]*)"/', $httpResponse->getContent(), $matches);
+            if($matches && $matches[1]){
+                Log::debug('SAMLResponse: '. $matches[1]);
+            }else{
+                Log::debug("SAMLResponse: Couldn't extract the response");
+            }
+        }
+
         print $httpResponse->getContent()."\n\n";
     }
 
