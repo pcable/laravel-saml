@@ -9,9 +9,13 @@ use KingStarter\LaravelSaml\Http\Traits\SamlAuth;
 class SamlIdpController extends Controller 
 {
     use SamlAuth;
-    
-    // This includes the controller routing points for 
-    // - metadata
-    // - certfile
-    // - keyfile (this one should be used only for authenticated users)
+
+    protected function metadata() {
+        return response(
+            $this->getSamlFile(config('saml.idp.metadata'), false),
+            200, [
+                'Content-Type' => 'application/xml'
+            ]
+        );
+    }
 }

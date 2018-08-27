@@ -1,7 +1,7 @@
-<?xml version="1.0"?>
-<!-- GENERATED WITH https://www.samltool.com/idp_metadata.php
-http://idp.[MYSITE] is just the Entity id, it doesn't need to exist, just needs to be unique
--->
+{{--GENERATED WITH https://www.samltool.com/idp_metadata.php--}}
+{{--http://idp.[MYSITE] is just the Entity id, it doesn't need to exist, just needs to be unique--}}
+{{--We have to escape the document definition as well or it doesn't run on certain php implementations --}}
+<{{'?'}}xml version="1.0"{{'?'}}>
 <md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" validUntil="2100-01-01T00:00:00Z" cacheDuration="PT1535772621S" entityID="{{config('saml.idp.entityId')}}">
     <md:IDPSSODescriptor WantAuthnRequestsSigned="false" protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">
         <md:KeyDescriptor use="signing">

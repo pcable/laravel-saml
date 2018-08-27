@@ -180,7 +180,19 @@ Auth::routes();
 Route::post('/postLogin', 'Auth\LoginController@showLoginForm');
 ```
 
+You'll also need to add a csrf exemption to ```App\Http\Middleware\VerifyCsrfToken```
 
+class VerifyCsrfToken extends Middleware
+{
+    /**
+     * The URIs that should be excluded from CSRF verification.
+     *
+     * @var array
+     */
+    protected $except = [
+        '/postLogin'
+    ];
+}
 
 ### Debugging Connection
 
